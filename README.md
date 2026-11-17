@@ -35,5 +35,6 @@ dotnet build src/StreamLauncher.csproj -c Release
 - Release には `StreamLauncher.exe` と `latest.json`(バージョン・SHA-256・RSA 署名)が付きます。
 - アプリは `releases/latest/download/latest.json` を確認し、`src/Updater.cs` に埋め込んだ公開鍵で
   署名を検証できた exe だけを適用します。
-- 署名用の秘密鍵はリポジトリに含めず、GitHub Actions の Secret `UPDATE_SIGNING_KEY` に置きます。
+- 署名用の秘密鍵はリポジトリに含めず、GitHub Actions の Secret `UPDATE_SIGNING_KEY` に置きます
+  (RSA 秘密鍵の XML を base64 にしたもの)。
 - アイコンは `tools/make-icon.ps1` で生成しています。

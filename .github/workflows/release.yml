@@ -33,8 +33,10 @@ jobs:
           $tag = '${{ github.ref_name }}'
           $bytes = [IO.File]::ReadAllBytes('dist/StreamLauncher.exe')
           $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
+          # Secret は秘密鍵 XML を base64 にしたもの(改行・文字コードで壊れないように)
+          $keyXml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:UPDATE_SIGNING_KEY.Trim()))
           $rsa = [System.Security.Cryptography.RSA]::Create()
-          $rsa.FromXmlString($env:UPDATE_SIGNING_KEY)
+          $rsa.FromXmlString($keyXml)
           $sig = $rsa.SignHash($hash, [System.Security.Cryptography.HashAlgorithmName]::SHA256,
                                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
           New-Item -ItemType Directory -Force out | Out-Null
