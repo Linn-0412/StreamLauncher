@@ -16,7 +16,7 @@ namespace StreamLauncher
     /// </summary>
     internal sealed class MainForm : Form
     {
-        private readonly bool _autoRunArg;
+        private readonly string _startupCommand;
         private readonly bool _justUpdated;
         private Updater.ReleaseInfo _pendingUpdate;
         private bool _updating;
@@ -37,18 +37,21 @@ namespace StreamLauncher
         private CheckBox _cbMouse, _cbCloseOnExit, _cbConfirmKill;
         private Button _btnBrowseExe, _btnBrowseFolder;
 
-        private CheckBox _cbSkip, _cbAutoRun;
-        private Button _btnSave, _btnTree, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun;
+        private CheckBox _cbSkip, _cbAutoRun, _cbConfirmClose;
+        private Button _btnSave, _btnTree, _btnStartMenu, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun;
         private TextBox _log;
 
-        public MainForm(bool autoRun, bool justUpdated)
+        public MainForm(string startupCommand, bool justUpdated)
         {
-            _autoRunArg = autoRun;
+            _startupCommand = startupCommand;
             _justUpdated = justUpdated;
             BuildUi();
             var s = Settings.LoadOrDefault();
             _cbSkip.Checked = s.SkipIfRunning;
             _cbAutoRun.Checked = s.AutoRunOnOpen;
+            _cbConfirmClose.Checked = s.ConfirmCloseAll;
+            Shortcuts.RefreshIfMoved(Application.ExecutablePath);
+            UpdateStartMenuButton();
             foreach (var a in s.Apps) _list.Items.Add(a, a.Enabled);
             if (_list.Items.Count > 0) _list.SelectedIndex = 0;
             else LoadEditor(null);
@@ -146,14 +149,16 @@ namespace StreamLauncher
 
             // --- 全体
             _cbSkip = Add<CheckBox>(this, 12, 388, 260, 22, "起動済みのアプリはスキップする");
-            _cbAutoRun = Add<CheckBox>(this, 280, 388, 470, 22, "このランチャーを開いたらすぐに起動を始める");
+            _cbAutoRun = Add<CheckBox>(this, 280, 388, 270, 22, "開いたらすぐに起動を始める");
+            _cbConfirmClose = Add<CheckBox>(this, 556, 388, 194, 22, "全部終了の前に確認する");
 
-            _btnSave = Add<Button>(this, 10, 418, 100, 34, "設定を保存");
-            _btnTree = Add<Button>(this, 116, 418, 110, 34, "UI要素一覧");
-            _btnUpdate = Add<Button>(this, 232, 418, 130, 34, "更新を確認");
-            _btnCloseAll = Add<Button>(this, 420, 418, 104, 34, "全部終了");
+            _btnSave = Add<Button>(this, 10, 418, 80, 34, "設定を保存");
+            _btnTree = Add<Button>(this, 94, 418, 90, 34, "UI要素一覧");
+            _btnStartMenu = Add<Button>(this, 188, 418, 150, 34, "スタートメニューに登録");
+            _btnUpdate = Add<Button>(this, 342, 418, 100, 34, "更新を確認");
+            _btnCloseAll = Add<Button>(this, 446, 418, 90, 34, "全部終了");
             _btnCloseAll.ForeColor = Color.Firebrick;
-            _btnCancel = Add<Button>(this, 530, 418, 100, 34, "中止");
+            _btnCancel = Add<Button>(this, 540, 418, 90, 34, "中止");
             _btnRun = Add<Button>(this, 636, 418, 114, 34, "起動");
             _btnRun.Font = new Font("Yu Gothic UI", 10F, FontStyle.Bold);
             _btnCancel.Enabled = false;
@@ -198,13 +203,20 @@ namespace StreamLauncher
             _btnCancel.Click += (s, e) => _cts?.Cancel();
             _btnRun.Click += async (s, e) => await RunAsync();
             _btnUpdate.Click += async (s, e) => await UpdateAsync();
+            _btnStartMenu.Click += (s, e) => ToggleStartMenu();
             FormClosing += (s, e) => _cts?.Cancel();
             Shown += async (s, e) =>
             {
+                // Stream Deck などから2つ目が起動されたときの命令を受け取る
+                SingleInstance.Listen(cmd =>
+                {
+                    try { BeginInvoke(new Action(async () => await HandleCommandAsync(cmd, fromOtherInstance: true))); }
+                    catch { }
+                });
                 if (_justUpdated) Log($"v{Updater.CurrentVersionText} に更新しました");
                 _ = AutoCheckUpdateAsync();
                 // 更新直後の再起動では自動起動しない(アプリは起動済みのはず)
-                if (!_justUpdated && (_autoRunArg || _cbAutoRun.Checked)) await RunAsync();
+                if (!_justUpdated) await HandleCommandAsync(_startupCommand, fromOtherInstance: false);
             };
 
             ResumeLayout(false);
@@ -385,7 +397,62 @@ namespace StreamLauncher
             Apps = _list.Items.Cast<AppEntry>().ToList(),
             SkipIfRunning = _cbSkip.Checked,
             AutoRunOnOpen = _cbAutoRun.Checked,
+            ConfirmCloseAll = _cbConfirmClose.Checked,
         };
+
+        // ------------------------------------------------------------ 外部からの命令・スタートメニュー
+
+        private async Task HandleCommandAsync(string command, bool fromOtherInstance)
+        {
+            if (fromOtherInstance) BringToFrontNow();
+            switch (command)
+            {
+                case "start":
+                    if (_cts != null) { Log("すでに起動処理中です"); return; }
+                    await RunAsync();
+                    break;
+                case "closeall":
+                    await CloseAllAsync();
+                    break;
+                default: // "show"
+                    if (!fromOtherInstance && _cbAutoRun.Checked) await RunAsync();
+                    break;
+            }
+        }
+
+        private void BringToFrontNow()
+        {
+            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+            Show();
+            TopMost = true;  // 他のウィンドウの後ろに隠れないよう一瞬だけ最前面に
+            TopMost = false;
+            Activate();
+        }
+
+        private void UpdateStartMenuButton()
+        {
+            _btnStartMenu.Text = Shortcuts.IsRegistered ? "スタートメニュー登録を解除" : "スタートメニューに登録";
+        }
+
+        private void ToggleStartMenu()
+        {
+            try
+            {
+                if (Shortcuts.IsRegistered)
+                {
+                    Shortcuts.Unregister();
+                    Log("スタートメニューの登録を解除しました");
+                }
+                else
+                {
+                    Shortcuts.Register(Application.ExecutablePath);
+                    Log("スタートメニューに登録しました:「StreamLauncher」「StreamLauncher 配信開始」「StreamLauncher 全部終了」");
+                    Log("   VSD Craft / Stream Deck の「開く」アクションで、これらをボタンに割り当てられます");
+                }
+            }
+            catch (Exception ex) { Log("スタートメニューを変更できませんでした: " + ex.Message); }
+            UpdateStartMenuButton();
+        }
 
         private bool TrySave(Settings s)
         {
@@ -552,7 +619,7 @@ namespace StreamLauncher
             }
 
             var names = string.Join("、", running.Select(t => t.Label));
-            if (MessageBox.Show(this, $"{names} を終了します。\r\n配信・録画中の場合は止まります。よろしいですか?",
+            if (s.ConfirmCloseAll && MessageBox.Show(this, $"{names} を終了します。\r\n配信・録画中の場合は止まります。よろしいですか?",
                     "全部終了", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
 
