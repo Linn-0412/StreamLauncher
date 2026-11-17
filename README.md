@@ -38,3 +38,7 @@ dotnet build src/StreamLauncher.csproj -c Release
 - 署名用の秘密鍵はリポジトリに含めず、GitHub Actions の Secret `UPDATE_SIGNING_KEY` に置きます
   (RSA 秘密鍵の XML を base64 にしたもの)。
 - アイコンは `tools/make-icon.ps1` で生成しています。
+
+## ライセンス
+
+[MIT License](LICENSE)
