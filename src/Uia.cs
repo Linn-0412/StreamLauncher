@@ -149,20 +149,19 @@ namespace StreamLauncher
             return lines;
         }
 
-        private static class Native
+        /// <summary>プロセスの最初のトップレベルウィンドウ。</summary>
+        public static IntPtr MainWindow(string processName)
         {
-            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-            [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
-            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-            [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
-            [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-
-            public static void Click(int x, int y)
+            foreach (var r in GetAppRoots(processName))
             {
-                SetCursorPos(x, y);
-                mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero); // LEFTDOWN
-                mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero); // LEFTUP
+                try
+                {
+                    var h = new IntPtr(r.Current.NativeWindowHandle);
+                    if (h != IntPtr.Zero) return h;
+                }
+                catch { }
             }
+            return IntPtr.Zero;
         }
     }
 }

@@ -24,6 +24,8 @@ namespace StreamLauncher
         [DataMember] public bool UseMouseClick;
         [DataMember] public bool CloseOnExit;
         [DataMember] public bool ConfirmBeforeKill;
+        /// <summary>「位置を記録」で登録した位置。ClickButtons の [位置N] から参照する。</summary>
+        [DataMember] public List<ClickPoint> Points;
 
         public AppEntry() { SetDefaults(); }
 
@@ -44,6 +46,7 @@ namespace StreamLauncher
             UseMouseClick = false;
             CloseOnExit = true;
             ConfirmBeforeKill = false;
+            Points = new List<ClickPoint>();
         }
 
         public string ResolveExe() =>

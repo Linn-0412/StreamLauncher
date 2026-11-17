@@ -35,7 +35,7 @@ namespace StreamLauncher
         private Label _lbDetected;
         private NumericUpDown _numWait, _numTimeout;
         private CheckBox _cbMouse, _cbCloseOnExit, _cbConfirmKill;
-        private Button _btnBrowseExe, _btnBrowseFolder;
+        private Button _btnBrowseExe, _btnBrowseFolder, _btnRecord;
 
         private CheckBox _cbSkip, _cbAutoRun, _cbConfirmClose, _cbExitAfterClose;
         private Button _btnSave, _btnTree, _btnStartMenu, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun;
@@ -133,7 +133,8 @@ namespace StreamLauncher
             _tbClicks.Multiline = true;
             _tbClicks.ScrollBars = ScrollBars.Vertical;
             _tbClicks.AcceptsReturn = true;
-            Hint(_gEdit, 318, 199, 202, 64, "1行に1つ。上から順に押します。\r\n空欄なら起動するだけ。\r\n例: Screen → 起動する");
+            Hint(_gEdit, 318, 199, 202, 36, "1行に1つ、上から順に押します。\r\n名前で押せないボタンは位置で記録:");
+            _btnRecord = Add<Button>(_gEdit, 318, 237, 130, 26, "位置を記録…");
 
             Add<Label>(_gEdit, 12, 275, 115, 20, "ボタン検索の上限(秒)");
             _numTimeout = Add<NumericUpDown>(_gEdit, 130, 272, 70, 23);
@@ -198,6 +199,7 @@ namespace StreamLauncher
             _cbConfirmKill.CheckedChanged += (s, e) => Edit(a => a.ConfirmBeforeKill = _cbConfirmKill.Checked);
             _btnBrowseExe.Click += (s, e) => BrowseExe();
             _btnBrowseFolder.Click += (s, e) => BrowseFolder();
+            _btnRecord.Click += async (s, e) => await RecordPositionAsync();
 
             _btnSave.Click += (s, e) => { if (TrySave(CollectSettings())) Log("設定を保存しました"); };
             _btnTree.Click += async (s, e) => await ShowUiTreeAsync();
@@ -538,9 +540,15 @@ namespace StreamLauncher
                 {
                     // 2つ目以降(確認ダイアログなど)はすぐ出るはずなので短め
                     int timeout = i == 0 ? a.ClickTimeoutSec : 15;
+                    var point = ParsePointRef(a, clicks[i]);
+                    if (point != null)
+                    {
+                        await ClickPositionAsync(proc, clicks[i], point, timeout, ct);
+                        continue;
+                    }
                     Log($"   「{clicks[i]}」を探しています…(最大 {timeout} 秒)");
                     var hit = await WaitElementAsync(proc, clicks[i], timeout, ct)
-                              ?? throw new Exception($"{a} の「{clicks[i]}」が見つかりませんでした。「UI要素一覧」で実際の名前を確認してください");
+                              ?? throw new Exception($"{a} の「{clicks[i]}」が見つかりませんでした。「UI要素一覧」で実際の名前を確認するか、「位置を記録」を使ってください");
                     await ClickAsync(hit, a.UseMouseClick);
                 }
 
@@ -579,6 +587,96 @@ namespace StreamLauncher
                 if (hit != null) return hit;
                 if (DateTime.Now > deadline) return null;
                 await Task.Delay(1000, ct);
+            }
+        }
+
+        // ------------------------------------------------------------ 位置で押す
+
+        private static readonly System.Text.RegularExpressions.Regex PointRef =
+            new System.Text.RegularExpressions.Regex(@"^\[位置(\d+)\]$");
+
+        /// <summary>「[位置N]」なら記録済みの位置、それ以外(ボタン名)なら null。</summary>
+        private static ClickPoint ParsePointRef(AppEntry a, string line)
+        {
+            var m = PointRef.Match(line.Trim());
+            if (!m.Success) return null;
+            int n = int.Parse(m.Groups[1].Value);
+            if (a.Points == null || n < 1 || n > a.Points.Count)
+                throw new Exception($"{a} の {line} は記録されていません。「位置を記録」でもう一度記録してください");
+            return a.Points[n - 1];
+        }
+
+        private async Task ClickPositionAsync(string proc, string label, ClickPoint cp, int timeoutSec, CancellationToken ct)
+        {
+            Log($"   {label} の画面が出るのを待っています…(最大 {timeoutSec} 秒)");
+            var deadline = DateTime.Now.AddSeconds(timeoutSec);
+            IntPtr hwnd = IntPtr.Zero;
+            Point? target = null, fallback = null;
+            bool activated = false;
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                hwnd = await Task.Run(() => Uia.MainWindow(proc), ct);
+                if (hwnd != IntPtr.Zero)
+                {
+                    // 他のウィンドウに隠れていると画像を探せないので前面に出す
+                    if (!activated) { Native.Activate(hwnd); activated = true; await Task.Delay(300, ct); }
+                    var h = hwnd;
+                    var (expected, matched) = await Task.Run(() => PositionClicker.Locate(h, cp), ct);
+                    if (expected != Point.Empty) fallback = expected;
+                    if (matched != null) { target = matched; break; }
+                }
+                if (DateTime.Now > deadline) break;
+                await Task.Delay(500, ct);
+            }
+
+            if (target == null)
+            {
+                if (fallback == null) throw new Exception($"{label}: ウィンドウが見つかりませんでした");
+                Log("   画像が見つからなかったので、記録した位置をそのままクリックします");
+                target = fallback;
+            }
+            Native.Activate(hwnd);
+            await Task.Delay(200, ct);
+            Native.Click(target.Value.X, target.Value.Y);
+            Log($"   {label} をクリックしました");
+        }
+
+        private async Task RecordPositionAsync()
+        {
+            var a = _current;
+            if (a == null) return;
+            var proc = a.ProcessName;
+            if (proc == null || !AppLocator.IsRunning(proc))
+            {
+                Log($"{a} が起動していません。先に起動して、押したいボタンが見える状態にしてください");
+                return;
+            }
+            if (MessageBox.Show(this,
+                    $"OK を押すと 3 秒後にマウスの位置を記録します。\r\nそれまでに、{a} の押したいボタンの上にマウスを置いてください。",
+                    "位置を記録", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+                return;
+
+            _btnRecord.Enabled = false;
+            try
+            {
+                for (int i = 3; i > 0; i--) { Log($"   {i}…"); await Task.Delay(1000); }
+                var cp = PositionClicker.Record(proc);
+                if (a.Points == null) a.Points = new List<ClickPoint>();
+                a.Points.Add(cp);
+                var line = $"[位置{a.Points.Count}]";
+                var text = _tbClicks.Text.TrimEnd();
+                _tbClicks.Text = (text.Length > 0 ? text + "\r\n" : "") + line; // TextChanged で ClickButtons に反映
+                Log($"{line} を記録しました。「起動後に押すボタン」に追加しています(順番は入れ替えられます)");
+            }
+            catch (Exception ex)
+            {
+                Log("記録できませんでした: " + ex.Message);
+            }
+            finally
+            {
+                _btnRecord.Enabled = true;
+                BringToFrontNow();
             }
         }
 
