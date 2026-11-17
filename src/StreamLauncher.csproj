@@ -9,7 +9,7 @@
     <RootNamespace>StreamLauncher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <Product>配信スタートランチャー</Product>
     <DebugType>none</DebugType>
     <!-- 64bit で動かす(起動中の OBS 等の exe パスを読むため) -->

@@ -18,6 +18,7 @@ namespace StreamLauncher
         [DataMember] public bool SkipIfRunning;
         [DataMember] public bool AutoRunOnOpen;
         [DataMember] public bool ConfirmCloseAll;
+        [DataMember] public bool ExitAfterCloseAll;
 
         public Settings()
         {
@@ -35,6 +36,7 @@ namespace StreamLauncher
             SkipIfRunning = true;
             AutoRunOnOpen = false;
             ConfirmCloseAll = true;
+            ExitAfterCloseAll = true;
         }
 
         public static string FolderPath =>

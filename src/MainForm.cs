@@ -37,7 +37,7 @@ namespace StreamLauncher
         private CheckBox _cbMouse, _cbCloseOnExit, _cbConfirmKill;
         private Button _btnBrowseExe, _btnBrowseFolder;
 
-        private CheckBox _cbSkip, _cbAutoRun, _cbConfirmClose;
+        private CheckBox _cbSkip, _cbAutoRun, _cbConfirmClose, _cbExitAfterClose;
         private Button _btnSave, _btnTree, _btnStartMenu, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun;
         private TextBox _log;
 
@@ -50,6 +50,7 @@ namespace StreamLauncher
             _cbSkip.Checked = s.SkipIfRunning;
             _cbAutoRun.Checked = s.AutoRunOnOpen;
             _cbConfirmClose.Checked = s.ConfirmCloseAll;
+            _cbExitAfterClose.Checked = s.ExitAfterCloseAll;
             Shortcuts.RefreshIfMoved(Application.ExecutablePath);
             UpdateStartMenuButton();
             foreach (var a in s.Apps) _list.Items.Add(a, a.Enabled);
@@ -151,19 +152,20 @@ namespace StreamLauncher
             _cbSkip = Add<CheckBox>(this, 12, 388, 260, 22, "起動済みのアプリはスキップする");
             _cbAutoRun = Add<CheckBox>(this, 280, 388, 270, 22, "開いたらすぐに起動を始める");
             _cbConfirmClose = Add<CheckBox>(this, 556, 388, 194, 22, "全部終了の前に確認する");
+            _cbExitAfterClose = Add<CheckBox>(this, 12, 412, 400, 22, "全部終了したらランチャーも閉じる");
 
-            _btnSave = Add<Button>(this, 10, 418, 80, 34, "設定を保存");
-            _btnTree = Add<Button>(this, 94, 418, 90, 34, "UI要素一覧");
-            _btnStartMenu = Add<Button>(this, 188, 418, 150, 34, "スタートメニューに登録");
-            _btnUpdate = Add<Button>(this, 342, 418, 100, 34, "更新を確認");
-            _btnCloseAll = Add<Button>(this, 446, 418, 90, 34, "全部終了");
+            _btnSave = Add<Button>(this, 10, 440, 80, 34, "設定を保存");
+            _btnTree = Add<Button>(this, 94, 440, 90, 34, "UI要素一覧");
+            _btnStartMenu = Add<Button>(this, 188, 440, 150, 34, "スタートメニューに登録");
+            _btnUpdate = Add<Button>(this, 342, 440, 100, 34, "更新を確認");
+            _btnCloseAll = Add<Button>(this, 446, 440, 90, 34, "全部終了");
             _btnCloseAll.ForeColor = Color.Firebrick;
-            _btnCancel = Add<Button>(this, 540, 418, 90, 34, "中止");
-            _btnRun = Add<Button>(this, 636, 418, 114, 34, "起動");
+            _btnCancel = Add<Button>(this, 540, 440, 90, 34, "中止");
+            _btnRun = Add<Button>(this, 636, 440, 114, 34, "起動");
             _btnRun.Font = new Font("Yu Gothic UI", 10F, FontStyle.Bold);
             _btnCancel.Enabled = false;
 
-            _log = Add<TextBox>(this, 10, 462, 740, 178);
+            _log = Add<TextBox>(this, 10, 484, 740, 156);
             _log.Multiline = true;
             _log.ScrollBars = ScrollBars.Vertical;
             _log.ReadOnly = true;
@@ -398,6 +400,7 @@ namespace StreamLauncher
             SkipIfRunning = _cbSkip.Checked,
             AutoRunOnOpen = _cbAutoRun.Checked,
             ConfirmCloseAll = _cbConfirmClose.Checked,
+            ExitAfterCloseAll = _cbExitAfterClose.Checked,
         };
 
         // ------------------------------------------------------------ 外部からの命令・スタートメニュー
@@ -615,6 +618,7 @@ namespace StreamLauncher
             if (running.Count == 0)
             {
                 Log("終了するアプリはありません");
+                if (s.ExitAfterCloseAll) await ExitLauncherAsync(s);
                 return;
             }
 
@@ -627,6 +631,7 @@ namespace StreamLauncher
             _closing = true;
             _btnCloseAll.Enabled = false;
             SetBusy(true);
+            bool allClosed = true;
             try
             {
                 foreach (var t in running)
@@ -647,23 +652,44 @@ namespace StreamLauncher
                             "全部終了", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                         // ダイアログを見ている間に自分で閉じた場合
                         if (!AppLocator.IsRunning(t.Process)) { Log($"   {t.Label} を終了しました"); continue; }
-                        if (ans != DialogResult.Yes) { Log($"   {t.Label} は終了しませんでした"); continue; }
+                        if (ans != DialogResult.Yes) { Log($"   {t.Label} は終了しませんでした"); allClosed = false; continue; }
                     }
 
                     AppLocator.Kill(t.Process);
-                    Log(await WaitExitAsync(t.Process, 5)
-                        ? $"   {t.Label} を強制終了しました"
-                        : $"   {t.Label} を終了できませんでした");
+                    if (await WaitExitAsync(t.Process, 5))
+                    {
+                        Log($"   {t.Label} を強制終了しました");
+                    }
+                    else
+                    {
+                        Log($"   {t.Label} を終了できませんでした");
+                        allClosed = false;
+                    }
                 }
-                Log("全部終了しました");
+                Log(allClosed ? "全部終了しました" : "終了できなかったアプリがあります");
             }
-            catch (Exception ex) { Log("エラー: " + ex.Message); }
+            catch (Exception ex)
+            {
+                Log("エラー: " + ex.Message);
+                allClosed = false;
+            }
             finally
             {
                 _closing = false;
                 if (!IsDisposed) _btnCloseAll.Enabled = true;
                 SetBusy(_cts != null);
             }
+
+            // 閉じきれなかったアプリがあるときは、ログを見られるようランチャーは残す
+            if (allClosed && s.ExitAfterCloseAll) await ExitLauncherAsync(s);
+        }
+
+        private async Task ExitLauncherAsync(Settings s)
+        {
+            TrySave(s);
+            Log("ランチャーを閉じます");
+            await Task.Delay(800); // ログが一瞬見えるように
+            if (!IsDisposed) Close();
         }
 
         private static async Task<bool> WaitExitAsync(string processName, int timeoutSec)
