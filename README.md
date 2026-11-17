@@ -8,6 +8,7 @@
 - 「全部終了」で、起動したのと逆の順番にまとめて終了
   - OBS など強制終了すると困るアプリは、強制終了の前に確認
 - OBS / CastCraft / VSeeFace のプリセット入り(初回に自動で場所を探します)
+- 自動アップデート(起動時に確認、ボタン1つで更新。更新ファイルは署名検証済みのものだけ適用)
 
 ## ダウンロード
 
@@ -28,3 +29,11 @@ dotnet build src/StreamLauncher.csproj -c Release
 
 `dist/` に `StreamLauncher.exe` が出力されます。
 `v*` のタグを push すると GitHub Actions がビルドして Releases に zip を公開します。
+
+### 自動アップデートの仕組み
+
+- Release には `StreamLauncher.exe` と `latest.json`(バージョン・SHA-256・RSA 署名)が付きます。
+- アプリは `releases/latest/download/latest.json` を確認し、`src/Updater.cs` に埋め込んだ公開鍵で
+  署名を検証できた exe だけを適用します。
+- 署名用の秘密鍵はリポジトリに含めず、GitHub Actions の Secret `UPDATE_SIGNING_KEY` に置きます。
+- アイコンは `tools/make-icon.ps1` で生成しています。

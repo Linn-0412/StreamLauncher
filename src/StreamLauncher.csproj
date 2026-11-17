@@ -8,7 +8,8 @@
     <AssemblyName>StreamLauncher</AssemblyName>
     <RootNamespace>StreamLauncher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.0</Version>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
     <Product>配信スタートランチャー</Product>
     <DebugType>none</DebugType>
     <!-- 64bit で動かす(起動中の OBS 等の exe パスを読むため) -->
@@ -24,6 +25,7 @@
     <Reference Include="UIAutomationTypes" />
     <Reference Include="WindowsBase" />
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 
   <ItemGroup>

@@ -9,10 +9,13 @@ namespace StreamLauncher
         [STAThread]
         private static void Main(string[] args)
         {
+            bool Has(string flag) => args.Any(a => string.Equals(a, flag, StringComparison.OrdinalIgnoreCase));
+
+            _ = Updater.CleanupOldAsync(Application.ExecutablePath);
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            bool autoRun = args.Any(a => string.Equals(a, "--autorun", StringComparison.OrdinalIgnoreCase));
-            Application.Run(new MainForm(autoRun));
+            Application.Run(new MainForm(autoRun: Has("--autorun"), justUpdated: Has("--updated")));
         }
     }
 }

@@ -23,10 +23,32 @@ jobs:
           $version = '${{ github.ref_name }}'.TrimStart('v')
           dotnet build src/StreamLauncher.csproj -c Release -p:Version=$version
 
+      # 自動更新用: exe に RSA 署名し latest.json を作る(公開鍵は src/Updater.cs に埋め込み)
+      - name: Sign update
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if (-not $env:UPDATE_SIGNING_KEY) { throw 'Secret UPDATE_SIGNING_KEY が設定されていません' }
+          $tag = '${{ github.ref_name }}'
+          $bytes = [IO.File]::ReadAllBytes('dist/StreamLauncher.exe')
+          $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
+          $rsa = [System.Security.Cryptography.RSA]::Create()
+          $rsa.FromXmlString($env:UPDATE_SIGNING_KEY)
+          $sig = $rsa.SignHash($hash, [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                               [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+          New-Item -ItemType Directory -Force out | Out-Null
+          [ordered]@{
+            version   = $tag.TrimStart('v')
+            url       = "https://github.com/${{ github.repository }}/releases/download/$tag/StreamLauncher.exe"
+            sha256    = [Convert]::ToHexString($hash)
+            signature = [Convert]::ToBase64String($sig)
+          } | ConvertTo-Json | Set-Content out/latest.json -Encoding utf8NoBOM
+          Copy-Item dist/StreamLauncher.exe out/StreamLauncher.exe
+
       - name: Package
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force out | Out-Null
           Compress-Archive -Path dist/StreamLauncher.exe, dist/StreamLauncher.exe.config, dist/README.txt `
             -DestinationPath out/StreamLauncher-${{ github.ref_name }}.zip
 
@@ -35,4 +57,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release create '${{ github.ref_name }}' out/*.zip --title '${{ github.ref_name }}' --generate-notes
+          gh release create '${{ github.ref_name }}' out/StreamLauncher-*.zip out/StreamLauncher.exe out/latest.json `
+            --title '${{ github.ref_name }}' --generate-notes

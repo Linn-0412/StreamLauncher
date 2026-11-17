@@ -17,6 +17,9 @@ namespace StreamLauncher
     internal sealed class MainForm : Form
     {
         private readonly bool _autoRunArg;
+        private readonly bool _justUpdated;
+        private Updater.ReleaseInfo _pendingUpdate;
+        private bool _updating;
         private CancellationTokenSource _cts;
         private bool _closing;
         private bool _loadingEditor;
@@ -35,12 +38,13 @@ namespace StreamLauncher
         private Button _btnBrowseExe, _btnBrowseFolder;
 
         private CheckBox _cbSkip, _cbAutoRun;
-        private Button _btnSave, _btnTree, _btnCloseAll, _btnCancel, _btnRun;
+        private Button _btnSave, _btnTree, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun;
         private TextBox _log;
 
-        public MainForm(bool autoRun)
+        public MainForm(bool autoRun, bool justUpdated)
         {
             _autoRunArg = autoRun;
+            _justUpdated = justUpdated;
             BuildUi();
             var s = Settings.LoadOrDefault();
             _cbSkip.Checked = s.SkipIfRunning;
@@ -70,7 +74,7 @@ namespace StreamLauncher
         private void BuildUi()
         {
             SuspendLayout();
-            Text = "配信スタートランチャー";
+            Text = $"配信スタートランチャー v{Updater.CurrentVersionText}";
             Font = new Font("Yu Gothic UI", 9F);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
@@ -146,6 +150,7 @@ namespace StreamLauncher
 
             _btnSave = Add<Button>(this, 10, 418, 100, 34, "設定を保存");
             _btnTree = Add<Button>(this, 116, 418, 110, 34, "UI要素一覧");
+            _btnUpdate = Add<Button>(this, 232, 418, 130, 34, "更新を確認");
             _btnCloseAll = Add<Button>(this, 420, 418, 104, 34, "全部終了");
             _btnCloseAll.ForeColor = Color.Firebrick;
             _btnCancel = Add<Button>(this, 530, 418, 100, 34, "中止");
@@ -192,8 +197,15 @@ namespace StreamLauncher
             _btnCloseAll.Click += async (s, e) => await CloseAllAsync();
             _btnCancel.Click += (s, e) => _cts?.Cancel();
             _btnRun.Click += async (s, e) => await RunAsync();
+            _btnUpdate.Click += async (s, e) => await UpdateAsync();
             FormClosing += (s, e) => _cts?.Cancel();
-            Shown += async (s, e) => { if (_autoRunArg || _cbAutoRun.Checked) await RunAsync(); };
+            Shown += async (s, e) =>
+            {
+                if (_justUpdated) Log($"v{Updater.CurrentVersionText} に更新しました");
+                _ = AutoCheckUpdateAsync();
+                // 更新直後の再起動では自動起動しない(アプリは起動済みのはず)
+                if (!_justUpdated && (_autoRunArg || _cbAutoRun.Checked)) await RunAsync();
+            };
 
             ResumeLayout(false);
             PerformLayout();
@@ -596,6 +608,95 @@ namespace StreamLauncher
                 await Task.Delay(300);
             }
             return !AppLocator.IsRunning(processName);
+        }
+
+        // ------------------------------------------------------------ 更新
+
+        private async Task AutoCheckUpdateAsync()
+        {
+            try
+            {
+                var info = await Updater.CheckAsync();
+                if (info == null || IsDisposed) return;
+                ShowUpdateAvailable(info);
+            }
+            catch { } // 起動時の自動確認はオフラインでも静かに失敗させる
+        }
+
+        private void ShowUpdateAvailable(Updater.ReleaseInfo info)
+        {
+            _pendingUpdate = info;
+            _btnUpdate.Text = $"v{info.Version} に更新";
+            _btnUpdate.ForeColor = Color.SeaGreen;
+            _btnUpdate.Font = new Font(Font, FontStyle.Bold);
+            Log($"新しいバージョン v{info.Version} があります。「v{info.Version} に更新」で更新できます");
+        }
+
+        private async Task UpdateAsync()
+        {
+            if (_updating) return;
+            if (_cts != null || _closing)
+            {
+                Log("起動・終了の処理中は更新できません。終わってからもう一度押してください");
+                return;
+            }
+            _updating = true;
+            _btnUpdate.Enabled = false;
+            try
+            {
+                var info = _pendingUpdate;
+                if (info == null)
+                {
+                    Log("更新を確認しています…");
+                    info = await Updater.CheckAsync();
+                    if (info == null)
+                    {
+                        Log($"最新バージョンです(v{Updater.CurrentVersionText})");
+                        return;
+                    }
+                    ShowUpdateAvailable(info);
+                }
+
+                if (MessageBox.Show(this,
+                        $"v{Updater.CurrentVersionText} → v{info.Version} に更新します。\r\n更新後、ランチャーは自動で再起動します(起動中の配信アプリはそのままです)。",
+                        "更新", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+                    return;
+
+                TrySave(CollectSettings());
+                Log($"v{info.Version} をダウンロードしています…");
+                var exe = Application.ExecutablePath;
+                await Updater.InstallAsync(info, exe);
+                Process.Start(new ProcessStartInfo(exe, "--updated")
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(exe),
+                })?.Dispose();
+                Close();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                OfferManualDownload("このフォルダには書き込めないため、自動で更新できませんでした。\r\n(Program Files などに置いている場合は、デスクトップなどに移すと自動更新できます)");
+            }
+            catch (Exception ex)
+            {
+                Log("更新できませんでした: " + ex.Message);
+                OfferManualDownload("更新できませんでした。\r\n" + ex.Message);
+            }
+            finally
+            {
+                _updating = false;
+                if (!IsDisposed) _btnUpdate.Enabled = true;
+            }
+        }
+
+        private void OfferManualDownload(string message)
+        {
+            if (MessageBox.Show(this, message + "\r\n\r\nダウンロードページを開きますか?", "更新",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+            {
+                try { Process.Start(new ProcessStartInfo(Updater.ReleasesPage) { UseShellExecute = true })?.Dispose(); }
+                catch { }
+            }
         }
 
         // ------------------------------------------------------------ UI要素一覧

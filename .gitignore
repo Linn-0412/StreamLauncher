@@ -1,5 +1,8 @@
 src/bin/
 src/obj/
 dist/
+tools/icon-preview.png
+# 更新署名の秘密鍵は絶対にコミットしない
+*signing-key*.xml
 *.user
 .vs/
