@@ -596,7 +596,7 @@ namespace StreamLauncher
             _filters = Add<TextBox>(gFl, 12, 22, 250, 70);
             _filters.Multiline = true; _filters.ScrollBars = ScrollBars.Vertical; _filters.AcceptsReturn = true;
             _filters.Text = (_src.RequiredFilters ?? "").Replace("\r\n", "\n").Replace("\n", "\r\n");
-            Add<Label>(gFl, 270, 22, 184, 70, "1 行に「ソース名:フィルター名」\r\n例: マイク:ボイチェン\r\n配信中に無効になると警告します").ForeColor = SystemColors.GrayText;
+            Add<Label>(gFl, 270, 22, 184, 70, "1 行に「ソース名:フィルター名」\r\n例: マイク:フィルター\r\n配信中に無効になると警告します").ForeColor = SystemColors.GrayText;
             _replay = Add<CheckBox>(gFl, 12, 98, 440, 22, "配信中にリプレイバッファが止まっていたら警告する"); _replay.Checked = _src.CheckReplayBuffer;
 
             var gNo = Add<GroupBox>(this, 10, 560, 460, 104, "通知");
