@@ -20,8 +20,16 @@ namespace StreamLauncher
         [DataMember] public string MicInput;
 
         [DataMember] public double DropWarnPercent;
-        [DataMember] public int MinBitrateKbps;
+        /// <summary>設定ビットレートの何 % を下回ったら警告するか。</summary>
+        [DataMember] public int BitrateWarnPercent;
+        /// <summary>基準のビットレート(kbps)。0 なら OBS の出力設定から読む。</summary>
+        [DataMember] public int TargetBitrateKbps;
         [DataMember] public int MicSilentSec;
+        /// <summary>必ず有効にしておくフィルター(1 行に「ソース名:フィルター名」)。</summary>
+        [DataMember] public string RequiredFilters;
+        [DataMember] public bool CheckReplayBuffer;
+        /// <summary>配信先の接続方法。true = アカウント接続(ストリームキーを確認しない)。</summary>
+        [DataMember] public bool AccountConnected;
         [DataMember] public int CpuWarnPercent;
         [DataMember] public int DiskWarnGb;
 
@@ -43,8 +51,11 @@ namespace StreamLauncher
             ProtectedPassword = "";
             MicInput = "";
             DropWarnPercent = 1.0;
-            MinBitrateKbps = 1500;
-            MicSilentSec = 60;
+            BitrateWarnPercent = 70;
+            TargetBitrateKbps = 0;
+            MicSilentSec = 30;
+            RequiredFilters = "";
+            CheckReplayBuffer = false;
             CpuWarnPercent = 90;
             DiskWarnGb = 5;
             PlaySound = true;

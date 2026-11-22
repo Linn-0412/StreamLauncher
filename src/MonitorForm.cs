@@ -62,8 +62,8 @@ namespace StreamLauncher
             Font = new Font("Yu Gothic UI", 9F);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(380, 480);
-            MinimumSize = new Size(396, 420);
+            ClientSize = new Size(380, 504);
+            MinimumSize = new Size(396, 444);
             MaximizeBox = false;
             StartPosition = FormStartPosition.Manual;
             var wa = Screen.PrimaryScreen.WorkingArea;
@@ -74,7 +74,7 @@ namespace StreamLauncher
             _lblStatus = Add<Label>(this, 10, 8, 360, 30, "接続しています…");
             _lblStatus.Font = new Font("Yu Gothic UI", 13F, FontStyle.Bold);
 
-            string[] rows = { "ビットレート", "回線(送信)", "エンコード", "描画", "マイク", "CPU", "ディスク空き", "録画" };
+            string[] rows = { "ビットレート", "回線(送信)", "エンコード", "描画", "マイク", "フィルター", "CPU / メモリ", "ディスク空き", "録画" };
             int y = 46;
             foreach (var r in rows)
             {
@@ -85,17 +85,17 @@ namespace StreamLauncher
                 y += 24;
             }
 
-            _banner = Add<Label>(this, 10, 244, 360, 62);
+            _banner = Add<Label>(this, 10, 268, 360, 62);
             _banner.Padding = new Padding(6);
             _banner.Visible = false;
             _banner.Font = new Font("Yu Gothic UI", 9.5F, FontStyle.Bold);
 
-            _btnCheck = Add<Button>(this, 10, 314, 110, 30, "事前チェック");
-            _btnSettings = Add<Button>(this, 126, 314, 80, 30, "設定");
-            _cbTop = Add<CheckBox>(this, 216, 318, 154, 22, "常に手前に表示");
+            _btnCheck = Add<Button>(this, 10, 338, 110, 30, "事前チェック");
+            _btnSettings = Add<Button>(this, 126, 338, 80, 30, "設定");
+            _cbTop = Add<CheckBox>(this, 216, 342, 154, 22, "常に手前に表示");
             _cbTop.Checked = _s.AlwaysOnTop;
 
-            _log = Add<TextBox>(this, 10, 352, 360, 118);
+            _log = Add<TextBox>(this, 10, 376, 360, 118);
             _log.Multiline = true;
             _log.ReadOnly = true;
             _log.ScrollBars = ScrollBars.Vertical;
@@ -216,20 +216,25 @@ namespace StreamLauncher
                 }
 
                 bool warmingUp = s.Streaming && (s.StreamSec < 15 || !s.HasRates);
-                if (!s.Streaming) SetValue("ビットレート", "—", MutedColor);
-                else SetValue("ビットレート", $"{s.Kbps:0} kbps" + (warmingUp ? "(計測中)" : ""),
-                    warmingUp ? MutedColor : s.Kbps < _s.MinBitrateKbps ? WarnColor : OkColor);
+                var target = s.TargetKbps > 0 ? $" / {(s.TargetIsObserved ? "最大" : "設定")} {s.TargetKbps:0}" : "";
+                if (!s.Streaming) SetValue("ビットレート", s.TargetKbps > 0 && !s.TargetIsObserved ? $"— (設定 {s.TargetKbps:0} kbps)" : "—", MutedColor);
+                else SetValue("ビットレート", $"{s.Kbps:0}{target} kbps" + (warmingUp ? "(計測中)" : ""),
+                    warmingUp ? MutedColor : s.TargetKbps > 0 && s.Kbps < s.TargetKbps * _s.BitrateWarnPercent / 100.0 ? WarnColor : OkColor);
 
                 if (!s.Streaming) SetValue("回線(送信)", "—", MutedColor);
                 else if (s.Reconnecting) SetValue("回線(送信)", "再接続中", BadColor);
-                else SetValue("回線(送信)", $"ドロップ {s.NetDropPct:0.0}%", Level(s.NetDropPct));
+                else SetValue("回線(送信)", $"ドロップ {s.NetDropPct:0.0}% / 混雑 {s.Congestion:0.00}",
+                    s.NetDropPct >= _s.DropWarnPercent * 5 ? BadColor : s.NetDropPct >= _s.DropWarnPercent || s.Congestion >= 0.5 ? WarnColor : OkColor);
 
                 bool active = s.Streaming || s.Recording;
-                SetValue("エンコード", active ? $"遅延 {s.EncodeLagPct:0.0}%" : "—", active ? Level(s.EncodeLagPct) : MutedColor);
-                SetValue("描画", $"遅延 {s.RenderLagPct:0.0}%", Level(s.RenderLagPct));
+                SetValue("エンコード", active ? (s.EncodeSkippedRecent > 0 ? $"遅れ {s.EncodeSkippedRecent:0} フレーム(10 秒)" : "遅れなし") : "—",
+                    active ? (s.EncodeSkippedRecent > 0 ? WarnColor : OkColor) : MutedColor);
+                SetValue("描画", s.RenderSkippedRecent > 0 ? $"遅れ {s.RenderSkippedRecent:0} フレーム(10 秒)" : "遅れなし",
+                    s.RenderSkippedRecent > 0 ? (active ? WarnColor : MutedColor) : OkColor);
 
                 if (s.MicName == null) SetValue("マイク", "マイク入力が見つかりません", WarnColor);
                 else if (s.MicMuted) SetValue("マイク", $"ミュート中({s.MicName})", s.Streaming ? WarnColor : MutedColor);
+                else if (s.MicClipping) SetValue("マイク", $"音割れ!({s.MicDb:0} dB)", BadColor);
                 else
                 {
                     bool speaking = s.MicDb > HealthMonitor.MicActiveDb;
@@ -238,17 +243,25 @@ namespace StreamLauncher
                         speaking ? OkColor : silent ? WarnColor : MutedColor);
                 }
 
-                SetValue("CPU", $"{s.CpuPct:0}%", s.CpuPct >= _s.CpuWarnPercent ? WarnColor : OkColor);
+                if (s.Filters.Count == 0) SetValue("フィルター", "確認していません(設定で指定)", MutedColor);
+                else
+                {
+                    var bad = s.Filters.Where(f => f.Enabled != true).ToList();
+                    SetValue("フィルター", bad.Count == 0 ? $"OK({string.Join("、", s.Filters.Select(f => f.Filter))})"
+                        : string.Join("、", bad.Select(f => f.Filter + (f.Enabled == null ? " 見つからない" : " 無効"))),
+                        bad.Count == 0 ? OkColor : s.Streaming ? WarnColor : MutedColor);
+                }
+
+                SetValue("CPU / メモリ", $"{s.CpuPct:0}% / {s.MemoryMb:0} MB", s.CpuPct >= _s.CpuWarnPercent ? WarnColor : OkColor);
                 SetValue("ディスク空き", s.DiskGb >= 0 ? $"{s.DiskGb:0.0} GB" : "—",
                     s.DiskGb < 0 ? MutedColor : s.DiskGb < _s.DiskWarnGb ? WarnColor : OkColor);
-                SetValue("録画", s.Recording ? $"録画中 {TimeSpan.FromSeconds(s.RecordSec):hh\\:mm\\:ss}" : "停止中",
-                    s.Recording ? Color.Crimson : MutedColor);
+                var recText = s.Recording ? $"録画中 {TimeSpan.FromSeconds(s.RecordSec):hh\\:mm\\:ss}" : "停止中";
+                if (s.ReplayBuffer != null) recText += $" / リプレイ {s.ReplayBuffer}";
+                SetValue("録画", recText,
+                    s.Streaming && s.ReplayBuffer != null && s.ReplayBuffer != "動作中" ? WarnColor : s.Recording ? Color.Crimson : MutedColor);
             }
             UpdateProblems(s.Problems);
         }
-
-        private Color Level(double pct) =>
-            pct >= _s.DropWarnPercent * 5 ? BadColor : pct >= _s.DropWarnPercent ? WarnColor : OkColor;
 
         // ------------------------------------------------------------ 通知
 
@@ -362,11 +375,38 @@ namespace StreamLauncher
                 var svc = await _obs.RequestAsync("GetStreamServiceSettings");
                 var ss = J.D(J.Get(svc, "streamServiceSettings"));
                 var where = J.S(ss, "service").Length > 0 ? J.S(ss, "service") : J.S(ss, "server");
-                f.Add(J.S(ss, "key").Length > 0, "配信先", J.S(ss, "key").Length > 0 ? $"{where}(ストリームキー設定済み)" : "ストリームキーが設定されていません(OBS の 設定 → 配信)", warnOnly: false);
+                if (_s.AccountConnected)
+                    f.Add(true, "配信先", $"{(where.Length > 0 ? where : "サービス")}(アカウント接続のため、ストリームキーは確認しません)");
+                else
+                    f.Add(J.S(ss, "key").Length > 0, "配信先", J.S(ss, "key").Length > 0
+                        ? $"{where}(ストリームキー設定済み)"
+                        : "ストリームキーが設定されていません(OBS の 設定 → 配信。アカウント接続の場合はモニターの設定で切り替えてください)");
 
                 var scene = await _obs.RequestAsync("GetCurrentProgramScene");
                 var sceneName = J.S(scene, "sceneName").Length > 0 ? J.S(scene, "sceneName") : J.S(scene, "currentProgramSceneName");
                 f.Add(true, "現在のシーン", sceneName + "(配信開始時に映るシーンです)");
+
+                var kbps = await _health.ReadConfiguredKbpsAsync();
+                f.Add(kbps > 0, "ビットレート", kbps > 0
+                    ? $"{kbps:0} kbps(これの {_s.BitrateWarnPercent}% を下回ったら警告します)"
+                    : "設定値を読み取れませんでした(配信中の最大値を基準にします。モニターの設定で指定もできます)", warnOnly: true);
+
+                var filters = await _health.CheckFiltersAsync();
+                if (filters.Count == 0)
+                    f.Add(true, "フィルター", "確認するフィルターはありません(モニターの設定で指定できます)");
+                foreach (var flt in filters)
+                    f.Add(flt.Enabled == true, "フィルター",
+                        flt.Enabled == true ? $"{flt.Source}:{flt.Filter} は有効です"
+                        : flt.Enabled == false ? $"{flt.Source}:{flt.Filter} が無効になっています"
+                        : $"{flt.Source} にフィルター「{flt.Filter}」が見つかりません");
+
+                if (_s.CheckReplayBuffer)
+                {
+                    var rb = await _health.CheckReplayBufferAsync();
+                    f.Add(rb == "動作中", "リプレイバッファ", rb == "動作中" ? "動作中です"
+                        : rb == "停止中" ? "止まっています(OBS の「リプレイバッファ開始」を押してください)"
+                        : "使えません(OBS の 設定 → 出力 で有効にしてください)", warnOnly: true);
+                }
 
                 var stats = await _obs.RequestAsync("GetStats");
                 var video = await _obs.RequestAsync("GetVideoSettings");
@@ -479,10 +519,10 @@ namespace StreamLauncher
 
         private readonly MonitorSettings _src;
         private readonly Func<Task<List<string>>> _getInputs;
-        private TextBox _host, _password, _webhook;
-        private NumericUpDown _port, _drop, _bitrate, _silent, _cpu, _disk;
-        private ComboBox _mic;
-        private CheckBox _sound, _toast, _openAfter;
+        private TextBox _host, _password, _webhook, _filters;
+        private NumericUpDown _port, _drop, _bitratePct, _target, _silent, _cpu, _disk;
+        private ComboBox _mic, _target2;
+        private CheckBox _sound, _toast, _openAfter, _replay;
 
         public MonitorSettingsForm(MonitorSettings s, Func<Task<List<string>>> getInputs)
         {
@@ -515,44 +555,59 @@ namespace StreamLauncher
             Font = new Font("Yu Gothic UI", 9F);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(480, 520);
+            ClientSize = new Size(480, 704);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
 
-            var gObs = Add<GroupBox>(this, 10, 8, 460, 112, "OBS への接続");
+            var gObs = Add<GroupBox>(this, 10, 8, 460, 140, "OBS への接続");
             Add<Label>(gObs, 12, 26, 90, 20, "接続先");
             _host = Add<TextBox>(gObs, 110, 23, 160, 23); _host.Text = _src.Host;
             Add<Label>(gObs, 282, 26, 50, 20, "ポート");
             _port = Num(gObs, 334, 23, 0, 65535, _src.Port);
             Add<Label>(gObs, 12, 56, 90, 20, "パスワード");
             _password = Add<TextBox>(gObs, 110, 53, 160, 23); _password.UseSystemPasswordChar = true; _password.Text = _src.Password;
-            var hint = Add<Label>(gObs, 12, 82, 440, 22, "空欄・ポート 0 なら、この PC の OBS の設定を自動で使います");
+            var hint = Add<Label>(gObs, 282, 56, 172, 22, "空欄 = この PC の OBS の設定");
             hint.ForeColor = SystemColors.GrayText;
+            Add<Label>(gObs, 12, 86, 90, 20, "配信先");
+            _target2 = Add<ComboBox>(gObs, 110, 83, 230, 23);
+            _target2.DropDownStyle = ComboBoxStyle.DropDownList;
+            _target2.Items.AddRange(new object[] { "ストリームキーで接続", "アカウント接続(YouTube / Twitch 等)" });
+            _target2.SelectedIndex = _src.AccountConnected ? 1 : 0;
+            Add<Label>(gObs, 12, 112, 440, 22, "アカウント接続の場合、事前チェックでストリームキーを確認しません").ForeColor = SystemColors.GrayText;
 
-            var gMic = Add<GroupBox>(this, 10, 126, 460, 60, "マイク");
+            var gMic = Add<GroupBox>(this, 10, 154, 460, 60, "マイク");
             _mic = Add<ComboBox>(gMic, 12, 24, 300, 23);
             _mic.DropDownStyle = ComboBoxStyle.DropDown;
             _mic.Text = _src.MicInput;
             Add<Label>(gMic, 318, 27, 136, 20, "(空欄 = 自動)").ForeColor = SystemColors.GrayText;
 
-            var gTh = Add<GroupBox>(this, 10, 192, 460, 172, "警告する条件");
+            var gTh = Add<GroupBox>(this, 10, 220, 460, 200, "警告する条件");
             int y = 24;
-            Add<Label>(gTh, 12, y + 3, 250, 20, "フレームのドロップ・遅延(%)以上"); _drop = Num(gTh, 270, y, 0.1m, 50, (decimal)_src.DropWarnPercent, 1); y += 28;
-            Add<Label>(gTh, 12, y + 3, 250, 20, "ビットレート(kbps)未満"); _bitrate = Num(gTh, 270, y, 0, 100000, _src.MinBitrateKbps); y += 28;
-            Add<Label>(gTh, 12, y + 3, 250, 20, "マイクの無音(秒)以上"); _silent = Num(gTh, 270, y, 5, 3600, _src.MicSilentSec); y += 28;
-            Add<Label>(gTh, 12, y + 3, 250, 20, "OBS の CPU 使用率(%)以上"); _cpu = Num(gTh, 270, y, 10, 100, _src.CpuWarnPercent); y += 28;
+            Add<Label>(gTh, 12, y + 3, 250, 20, "回線のドロップ(直近 30 秒, %)以上"); _drop = Num(gTh, 270, y, 0.1m, 50, (decimal)_src.DropWarnPercent, 1); y += 28;
+            Add<Label>(gTh, 12, y + 3, 250, 20, "ビットレートが基準の(%)未満"); _bitratePct = Num(gTh, 270, y, 10, 100, _src.BitrateWarnPercent); y += 28;
+            Add<Label>(gTh, 12, y + 3, 250, 20, "基準のビットレート(kbps)"); _target = Num(gTh, 270, y, 0, 100000, _src.TargetBitrateKbps);
+            Add<Label>(gTh, 356, y + 3, 100, 20, "0 = OBS の設定").ForeColor = SystemColors.GrayText; y += 28;
+            Add<Label>(gTh, 12, y + 3, 250, 20, "配信中のマイクの無音(秒)以上"); _silent = Num(gTh, 270, y, 5, 3600, _src.MicSilentSec); y += 28;
+            Add<Label>(gTh, 12, y + 3, 250, 20, "OBS の CPU 使用率(10 秒平均, %)以上"); _cpu = Num(gTh, 270, y, 10, 100, _src.CpuWarnPercent); y += 28;
             Add<Label>(gTh, 12, y + 3, 250, 20, "録画先の空き(GB)未満"); _disk = Num(gTh, 270, y, 0, 10000, _src.DiskWarnGb);
 
-            var gNo = Add<GroupBox>(this, 10, 370, 460, 104, "通知");
+            var gFl = Add<GroupBox>(this, 10, 426, 460, 128, "必ず有効にしておくフィルター・リプレイバッファ");
+            _filters = Add<TextBox>(gFl, 12, 22, 250, 70);
+            _filters.Multiline = true; _filters.ScrollBars = ScrollBars.Vertical; _filters.AcceptsReturn = true;
+            _filters.Text = (_src.RequiredFilters ?? "").Replace("\r\n", "\n").Replace("\n", "\r\n");
+            Add<Label>(gFl, 270, 22, 184, 70, "1 行に「ソース名:フィルター名」\r\n例: マイク:ボイチェン\r\n配信中に無効になると警告します").ForeColor = SystemColors.GrayText;
+            _replay = Add<CheckBox>(gFl, 12, 98, 440, 22, "配信中にリプレイバッファが止まっていたら警告する"); _replay.Checked = _src.CheckReplayBuffer;
+
+            var gNo = Add<GroupBox>(this, 10, 560, 460, 104, "通知");
             _sound = Add<CheckBox>(gNo, 12, 22, 140, 22, "音を鳴らす"); _sound.Checked = _src.PlaySound;
             _toast = Add<CheckBox>(gNo, 160, 22, 160, 22, "Windows の通知"); _toast.Checked = _src.WindowsNotify;
             _openAfter = Add<CheckBox>(gNo, 12, 46, 440, 22, "ランチャーの起動が終わったら、このモニターを開く"); _openAfter.Checked = _src.OpenAfterLaunch;
             Add<Label>(gNo, 12, 74, 110, 20, "Discord Webhook");
             _webhook = Add<TextBox>(gNo, 126, 71, 322, 23); _webhook.Text = _src.DiscordWebhook;
 
-            var ok = Add<Button>(this, 290, 484, 86, 28, "OK");
-            var cancel = Add<Button>(this, 384, 484, 86, 28, "キャンセル");
+            var ok = Add<Button>(this, 290, 670, 86, 28, "OK");
+            var cancel = Add<Button>(this, 384, 670, 86, 28, "キャンセル");
             ok.Click += (s, e) => { Result = Collect(); DialogResult = DialogResult.OK; };
             cancel.DialogResult = DialogResult.Cancel;
             AcceptButton = ok;
@@ -580,8 +635,12 @@ namespace StreamLauncher
                 Port = (int)_port.Value,
                 MicInput = _mic.Text.Trim(),
                 DropWarnPercent = (double)_drop.Value,
-                MinBitrateKbps = (int)_bitrate.Value,
+                BitrateWarnPercent = (int)_bitratePct.Value,
+                TargetBitrateKbps = (int)_target.Value,
                 MicSilentSec = (int)_silent.Value,
+                RequiredFilters = _filters.Text.Trim(),
+                CheckReplayBuffer = _replay.Checked,
+                AccountConnected = _target2.SelectedIndex == 1,
                 CpuWarnPercent = (int)_cpu.Value,
                 DiskWarnGb = (int)_disk.Value,
                 PlaySound = _sound.Checked,
