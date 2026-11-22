@@ -38,7 +38,8 @@ namespace StreamLauncher
         private Button _btnBrowseExe, _btnBrowseFolder, _btnRecord;
 
         private CheckBox _cbSkip, _cbAutoRun, _cbConfirmClose, _cbExitAfterClose;
-        private Button _btnSave, _btnTree, _btnStartMenu, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun;
+        private Button _btnSave, _btnTree, _btnStartMenu, _btnUpdate, _btnCloseAll, _btnCancel, _btnRun, _btnMonitor;
+        private MonitorForm _monitor;
         private TextBox _log;
 
         public MainForm(string startupCommand, bool justUpdated)
@@ -154,6 +155,7 @@ namespace StreamLauncher
             _cbAutoRun = Add<CheckBox>(this, 280, 388, 270, 22, "開いたらすぐに起動を始める");
             _cbConfirmClose = Add<CheckBox>(this, 556, 388, 194, 22, "全部終了の前に確認する");
             _cbExitAfterClose = Add<CheckBox>(this, 12, 412, 400, 22, "全部終了したらランチャーも閉じる");
+            _btnMonitor = Add<Button>(this, 636, 406, 114, 30, "配信モニター");
 
             _btnSave = Add<Button>(this, 10, 440, 80, 34, "設定を保存");
             _btnTree = Add<Button>(this, 94, 440, 90, 34, "UI要素一覧");
@@ -208,7 +210,12 @@ namespace StreamLauncher
             _btnRun.Click += async (s, e) => await RunAsync();
             _btnUpdate.Click += async (s, e) => await UpdateAsync();
             _btnStartMenu.Click += (s, e) => ToggleStartMenu();
-            FormClosing += (s, e) => _cts?.Cancel();
+            _btnMonitor.Click += (s, e) => OpenMonitor();
+            FormClosing += (s, e) =>
+            {
+                _cts?.Cancel();
+                if (_monitor != null && !_monitor.IsDisposed) _monitor.Close();
+            };
             Shown += async (s, e) =>
             {
                 // Stream Deck などから2つ目が起動されたときの命令を受け取る
@@ -425,6 +432,14 @@ namespace StreamLauncher
             }
         }
 
+        private void OpenMonitor()
+        {
+            if (_monitor == null || _monitor.IsDisposed) _monitor = new MonitorForm();
+            _monitor.Show();
+            if (_monitor.WindowState == FormWindowState.Minimized) _monitor.WindowState = FormWindowState.Normal;
+            _monitor.Activate();
+        }
+
         private void BringToFrontNow()
         {
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
@@ -494,6 +509,7 @@ namespace StreamLauncher
             {
                 await RunSequenceAsync(s, _cts.Token);
                 Log("完了しました");
+                if (MonitorSettings.Load().OpenAfterLaunch) OpenMonitor();
             }
             catch (OperationCanceledException) { Log("中止しました"); }
             catch (Exception ex) { Log("エラー: " + ex.Message); }
