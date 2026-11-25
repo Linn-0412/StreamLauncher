@@ -108,39 +108,6 @@ namespace StreamLauncher
             catch { return null; }
         }
 
-        /// <summary>Steam のライブラリフォルダ(steamapps\libraryfolders.vdf から読む。複数ドライブ対応)。</summary>
-        public static List<string> SteamLibraries()
-        {
-            var libs = new List<string>();
-            string steam = null;
-            try
-            {
-                using (var k = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
-                    steam = (k?.GetValue("SteamPath") as string)?.Replace('/', '\\');
-            }
-            catch { }
-            if (string.IsNullOrEmpty(steam))
-                steam = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steam");
-            libs.Add(steam);
-            try
-            {
-                var vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
-                if (File.Exists(vdf))
-                    foreach (System.Text.RegularExpressions.Match m in
-                             System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(vdf), "\"path\"\\s+\"([^\"]+)\""))
-                    {
-                        var lib = m.Groups[1].Value.Replace(@"\\", @"\");
-                        if (!libs.Exists(x => string.Equals(x.TrimEnd('\\'), lib.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))) libs.Add(lib);
-                    }
-            }
-            catch { }
-            return libs;
-        }
-
-        /// <summary>Steam のゲームのフォルダ候補(steamapps\common\{folder})。</summary>
-        public static string[] SteamGameFolders(string folder) =>
-            SteamLibraries().ConvertAll(l => Path.Combine(l, "steamapps", "common", folder)).ToArray();
-
         private static string FindRunningFolder(string[] exeNames)
         {
             foreach (var n in exeNames)

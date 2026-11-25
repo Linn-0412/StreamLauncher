@@ -119,6 +119,16 @@ namespace StreamLauncher
             return a;
         }
 
+        /// <summary>VRCast(VRChat アバターを OBS に出す)。zip 展開なのでユーザーフォルダ内も探す。</summary>
+        public static AppEntry VRCast(bool detect = true)
+        {
+            var a = new AppEntry { Name = "VRCast", ExeName = "VRCast.exe" };
+            if (detect)
+                a.AppPath = AppLocator.FindAppFolder(new string[0], "VRCast", "VRCast",
+                    new[] { a.ExeName }, AppLocator.UserFolders);
+            return a;
+        }
+
         /// <summary>CommentDeck(コメント表示)。OBS のブラウザソースが読みに来るので OBS より先に起動する。</summary>
         public static AppEntry CommentDeck(bool detect = true)
         {
@@ -144,19 +154,6 @@ namespace StreamLauncher
                 var fromRun = AppLocator.FindRunEntryFolder("LiveAnnouncer");
                 a.AppPath = AppLocator.FindAppFolder(fromRun == null ? new string[0] : new[] { fromRun },
                     null, "LiveAnnouncer", new[] { a.ExeName }, AppLocator.UserFolders);
-            }
-            return a;
-        }
-
-        /// <summary>VRChat(Steam 版 / Meta ストア版)。exe を直接起動しても Steam 経由で立ち上がり直す。</summary>
-        public static AppEntry VRChat(bool detect = true)
-        {
-            var a = new AppEntry { Name = "VRChat", ExeName = "VRChat.exe", WaitAfterSec = 10 };
-            if (detect)
-            {
-                var c = new List<string>(AppLocator.SteamGameFolders("VRChat"));
-                c.Add(PF(@"Oculus\Software\Software\vrchat-vrchat"));
-                a.AppPath = AppLocator.FindAppFolder(c.ToArray(), null, "VRChat", new[] { a.ExeName });
             }
             return a;
         }

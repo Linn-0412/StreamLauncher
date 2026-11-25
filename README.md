@@ -7,7 +7,8 @@
   - 例: CastCraft の「Screen」→ 確認ダイアログの「起動する」
 - 「全部終了」で、起動したのと逆の順番にまとめて終了
   - OBS など強制終了すると困るアプリは、強制終了の前に確認
-- OBS / CastCraft / VSeeFace のプリセット入り(初回に自動で場所を探します)。VRChat も「追加 ▼」から追加できます(Steam のライブラリがどのドライブにあっても探します)
+- OBS / CastCraft / VSeeFace のプリセット入り(初回に自動で場所を探します)
+- VRCast(VRChat のアバターを OBS に出すアプリ)も「追加 ▼」から追加できます。起動時の「配信モード」ボタンは、VSeeFace の「スタート」と同じく「位置を記録」で押せます
 - [CommentDeck](https://github.com/Linn-0412/CommentDeck)(コメント表示)/ [LiveAnnouncer](https://github.com/Linn-0412/LiveAnnouncer)(配信開始の告知)も「追加 ▼」から追加できます
 - 配信モニター(obs-websocket で回線・ビットレート・負荷・マイクを見張り、問題があれば音 / Windows 通知 / Discord で知らせる。配信前の事前チェック付き)
 - 自動アップデート(起動時に確認、ボタン1つで更新。更新ファイルは署名検証済みのものだけ適用)
