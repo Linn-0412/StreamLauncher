@@ -148,6 +148,19 @@ namespace StreamLauncher
             return a;
         }
 
+        /// <summary>VRChat(Steam 版 / Meta ストア版)。exe を直接起動しても Steam 経由で立ち上がり直す。</summary>
+        public static AppEntry VRChat(bool detect = true)
+        {
+            var a = new AppEntry { Name = "VRChat", ExeName = "VRChat.exe", WaitAfterSec = 10 };
+            if (detect)
+            {
+                var c = new List<string>(AppLocator.SteamGameFolders("VRChat"));
+                c.Add(PF(@"Oculus\Software\Software\vrchat-vrchat"));
+                a.AppPath = AppLocator.FindAppFolder(c.ToArray(), null, "VRChat", new[] { a.ExeName });
+            }
+            return a;
+        }
+
         /// <summary>初回のリスト。見つからなかったアプリはチェックを外しておく。</summary>
         public static List<AppEntry> Defaults()
         {

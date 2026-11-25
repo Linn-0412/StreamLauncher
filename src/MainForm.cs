@@ -105,6 +105,7 @@ namespace StreamLauncher
             _addMenu.Items.Add("OBS", null, (s, e) => AddApp(Presets.Obs()));
             _addMenu.Items.Add("CastCraft(Screen も起動)", null, (s, e) => AddApp(Presets.CastCraft()));
             _addMenu.Items.Add("VSeeFace", null, (s, e) => AddApp(Presets.VSeeFace()));
+            _addMenu.Items.Add("VRChat", null, (s, e) => AddApp(Presets.VRChat()));
             _addMenu.Items.Add("CommentDeck(コメント表示)", null, (s, e) => AddApp(Presets.CommentDeck(), beforeObs: true));
             _addMenu.Items.Add("LiveAnnouncer(配信開始の告知)", null, (s, e) => AddApp(Presets.LiveAnnouncer()));
 

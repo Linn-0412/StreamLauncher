@@ -16,7 +16,7 @@
 
 ■ 起動リスト
 - 追加 ▼ … 「アプリを選んで追加…」で好きな exe を追加できます。
-             OBS / CastCraft / VSeeFace / CommentDeck / LiveAnnouncer は
+             OBS / CastCraft / VSeeFace / VRChat / CommentDeck / LiveAnnouncer は
              プリセットから追加できます(CommentDeck は OBS より前に入ります)。
 - 削除 / ↑ 上へ / ↓ 下へ … 選択中のアプリを削除・並べ替え
 - チェックを外したアプリは起動しません(リストには残ります)
