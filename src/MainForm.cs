@@ -105,6 +105,8 @@ namespace StreamLauncher
             _addMenu.Items.Add("OBS", null, (s, e) => AddApp(Presets.Obs()));
             _addMenu.Items.Add("CastCraft(Screen も起動)", null, (s, e) => AddApp(Presets.CastCraft()));
             _addMenu.Items.Add("VSeeFace", null, (s, e) => AddApp(Presets.VSeeFace()));
+            _addMenu.Items.Add("CommentDeck(コメント表示)", null, (s, e) => AddApp(Presets.CommentDeck(), beforeObs: true));
+            _addMenu.Items.Add("LiveAnnouncer(配信開始の告知)", null, (s, e) => AddApp(Presets.LiveAnnouncer()));
 
             // --- 選択中アプリの設定
             _gEdit = Add<GroupBox>(this, 220, 4, 530, 376, "アプリの設定");
@@ -240,10 +242,17 @@ namespace StreamLauncher
 
         // ------------------------------------------------------------ リスト操作
 
-        private void AddApp(AppEntry a)
+        /// <param name="beforeObs">OBS より前に入れる(OBS が読み込むものを先に起動するため)。</param>
+        private void AddApp(AppEntry a, bool beforeObs = false)
         {
             _suppressCheck = true;
-            int i = _list.Items.Add(a, a.Enabled);
+            int obs = -1;
+            if (beforeObs)
+                for (int k = 0; k < _list.Items.Count && obs < 0; k++)
+                    if (_list.Items[k] is AppEntry e && string.Equals(e.ProcessName, "obs64", StringComparison.OrdinalIgnoreCase)) obs = k;
+            int i;
+            if (obs >= 0) { _list.Items.Insert(obs, a); _list.SetItemChecked(obs, a.Enabled); i = obs; }
+            else i = _list.Items.Add(a, a.Enabled);
             _suppressCheck = false;
             _list.SelectedIndex = i;
             if (a.ResolveExe() == null) Log($"{a} の場所が見つかりませんでした。「exe…」か「フォルダ…」で指定してください");

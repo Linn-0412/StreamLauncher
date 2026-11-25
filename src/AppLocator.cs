@@ -92,6 +92,22 @@ namespace StreamLauncher
             return "";
         }
 
+        /// <summary>HKCU\...\Run に登録された exe のフォルダ(「Windows 起動時に開始」を使っているアプリ用)。</summary>
+        public static string FindRunEntryFolder(string valueName)
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
+                {
+                    if (!(k?.GetValue(valueName) is string v) || v.Length == 0) return null;
+                    v = v.Trim();
+                    var exe = v.StartsWith("\"") ? v.Substring(1, Math.Max(0, v.IndexOf('"', 1) - 1)) : v.Split(' ')[0];
+                    return Path.GetDirectoryName(exe);
+                }
+            }
+            catch { return null; }
+        }
+
         private static string FindRunningFolder(string[] exeNames)
         {
             foreach (var n in exeNames)

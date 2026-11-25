@@ -119,6 +119,35 @@ namespace StreamLauncher
             return a;
         }
 
+        /// <summary>CommentDeck(コメント表示)。OBS のブラウザソースが読みに来るので OBS より先に起動する。</summary>
+        public static AppEntry CommentDeck(bool detect = true)
+        {
+            var a = new AppEntry { Name = "CommentDeck", ExeName = "comment-deck.exe" };
+            if (detect)
+                a.AppPath = AppLocator.FindAppFolder(
+                    new[] { System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CommentDeck") },
+                    "CommentDeck", "CommentDeck", new[] { a.ExeName });
+            return a;
+        }
+
+        /// <summary>LiveAnnouncer(配信開始の告知)。zip 展開なので「Windows 起動時に開始」の登録とユーザーフォルダから探す。</summary>
+        public static AppEntry LiveAnnouncer(bool detect = true)
+        {
+            var a = new AppEntry
+            {
+                Name = "LiveAnnouncer",
+                ExeName = "LiveAnnouncer.exe",
+                Args = "--startup", // 通知を出さずに通知領域で待機
+            };
+            if (detect)
+            {
+                var fromRun = AppLocator.FindRunEntryFolder("LiveAnnouncer");
+                a.AppPath = AppLocator.FindAppFolder(fromRun == null ? new string[0] : new[] { fromRun },
+                    null, "LiveAnnouncer", new[] { a.ExeName }, AppLocator.UserFolders);
+            }
+            return a;
+        }
+
         /// <summary>初回のリスト。見つからなかったアプリはチェックを外しておく。</summary>
         public static List<AppEntry> Defaults()
         {
