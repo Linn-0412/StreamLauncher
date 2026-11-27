@@ -44,4 +44,6 @@ dotnet build src/StreamLauncher.csproj -c Release
 
 ## ライセンス
 
-[MIT License](LICENSE)
+[GNU General Public License v3.0](LICENSE)(GPL-3.0)
+
+v1.4.3 までは MIT License で公開していました。次のバージョンから GPL-3.0 になります。
